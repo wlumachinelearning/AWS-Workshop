@@ -2,7 +2,7 @@
 
 **AI & ML Club × AWS Club**
 
-## How a model learns
+## How to watch video preview
 
 Preview the interactive visualization in your browser.
 
