@@ -6,6 +6,12 @@
 
 Preview the interactive visualization in your browser.
 
+### OPTION A:
+
+Go to the `/recordings` folder and watch the recording called "`demo.webm`"
+
+### OPTION B:
+
 1. Clone the repository.
 
    ```bash
