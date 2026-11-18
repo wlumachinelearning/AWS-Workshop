@@ -2,6 +2,14 @@
 
 **AI & ML Club × AWS Club**
 
+## How a model learns
+
+<video controls preload="metadata" width="720" src="recordings/page@5a9388612390cf59ba087ed9dcbdc1f3.webm"></video>
+
+[Watch the ML pipeline recording (.webm)](recordings/page@5a9388612390cf59ba087ed9dcbdc1f3.webm)
+
+## Workshop overview
+
 In this workshop, students take a pretrained model from Hugging Face (`distilbert-base-uncased`) and fine-tune it to detect the emotion in a sentence (sadness, joy, love, anger, fear, surprise). They use the `dair-ai/emotion` dataset and do everything in **Amazon SageMaker AI**. They train it twice:
 
 1. **In a notebook**, so they can see each step.
