@@ -9,11 +9,6 @@ In this workshop, students take a pretrained model from Hugging Face (`distilber
 
 Everything runs on **CPU instances that are covered by the SageMaker free tier**. No GPU quota is needed.
 
-> **How to read this doc**
-> - Numbered steps are what students click or type.
-> - `> Say:` blocks are presenter talking points.
-> - `Expected:` lines tell you what students should see. If they don't see it, check the **Troubleshooting** section at the bottom.
-
 ---
 
 ## Timing at a glance
@@ -30,19 +25,7 @@ Everything runs on **CPU instances that are covered by the SageMaker free tier**
 
 ---
 
-## BEFORE THE WORKSHOP: presenter checklist
-
-Do all of this **at least 3 days before** the event.
-
-- [ ] **Decide how students get AWS accounts.** Ask the AWS club whether they can get temporary event accounts from AWS (e.g. AWS Workshop Studio or AWS Academy). If they can, students don't need credit cards and you can skip most of the setup below. If not, students must create their own AWS accounts **before the event**, because verification can take time.
-- [ ] **Pick ONE region for everyone** and put it on a slide. This guide uses **US East (N. Virginia) `us-east-1`**. Mixed regions are the #1 cause of "I can't find my stuff."
-- [ ] **If students use personal accounts:** send them the "Student pre-work" section below and ask them to finish it before they arrive. Setting up a SageMaker domain takes 5–10 minutes, and you don't want 40 people doing it at the same time on venue Wi-Fi.
-- [ ] **Do a full dry run** of Parts 1–4 in a fresh account. Time it. Library versions change, so if a cell fails, fix it here and update this doc.
-- [ ] **Prepare a backup:** the Part 2 code also runs in Google Colab (it's plain Python). Have a Colab link ready in case some students can't sign in to AWS.
-- [ ] **Have 1–2 TAs** (ideally from the AWS club) who did the dry run and can walk around.
-- [ ] **Cost note:** For new AWS accounts, the SageMaker AI free tier (first 2 months) covers 250 hrs/month of `ml.t3.medium` notebooks and 50 hrs/month of `ml.m5.xlarge` training. This workshop uses about 1.5 notebook hours and about 15 training minutes per student. It's still a good idea for students to set up a zero-spend budget alert (see pre-work).
-
-### Student pre-work (send this out ahead of time)
+### Student pre-work (Coplete this first)
 
 1. Create an AWS account at **aws.amazon.com** → **Create an AWS Account**.
 2. Sign in to the **AWS Console**.
@@ -59,7 +42,6 @@ Do all of this **at least 3 days before** the event.
 
 ## PART 0: Sign in (10 min)
 
-> **Say:** "Everyone sign in to the AWS Console. Before you do anything else, look at the top-right corner. It needs to say **N. Virginia**. If it doesn't, click it and change it."
 
 1. Go to **console.aws.amazon.com** and sign in (or use the event account link from the AWS club).
 2. **Top-right corner:** confirm the region is **US East (N. Virginia)**. If not, click it and select it.
@@ -70,8 +52,6 @@ Do all of this **at least 3 days before** the event.
 ---
 
 ## PART 1: Open SageMaker Studio and start a notebook (10 min)
-
-> **Say:** "SageMaker Studio is AWS's browser-based workspace for ML. Inside it we'll launch JupyterLab. It's the same Jupyter you might already know, except it's running on an AWS computer instead of your laptop."
 
 1. In the SageMaker AI left menu, click **Studio**.
 2. Under the user profile dropdown, keep the default user (e.g. `default-…`) and click **Open Studio**.
@@ -90,10 +70,6 @@ Do all of this **at least 3 days before** the event.
 
 **Expected:** an empty notebook with one code cell.
 
-> **How to run a cell:** click inside the cell, then press **Shift + Enter**. While it's running you'll see `[*]` on the left. When it's done, the `*` turns into a number.
->
-> **Rule for the whole workshop:** run cells **in order, top to bottom**, and wait for each one to finish before running the next.
-
 ---
 
 ## PART 2: Fine-tune the model in the notebook (35–40 min)
@@ -110,7 +86,6 @@ For each step, **copy the code block into a new cell** and run it. To add a new 
 
 **IMPORTANT, restart the kernel now:** click **Kernel → Restart Kernel…** → **Restart**. This loads the freshly installed libraries.
 
-> **Say:** "`transformers` is Hugging Face's library for loading and training models. `datasets` is their library for loading datasets. `sagemaker` is the AWS library we'll use in Part 3."
 
 ### Step 2.2: Check that everything loaded
 
@@ -143,9 +118,6 @@ for i in range(5):
 
 **Expected:** a summary showing `train` (16000 rows), `validation` (2000) and `test` (2000), the 6 labels, and 5 example tweets with their emotions.
 
-> **Say:** "We just downloaded a dataset from the Hugging Face Hub with one line. Every row is a piece of text and a label. That's what *supervised learning* means: we show the model examples where we already know the right answer."
->
-> Optional: show huggingface.co/datasets/dair-ai/emotion on the projector.
 
 ### Step 2.4: Take a small slice (so training is fast)
 
@@ -159,7 +131,6 @@ print("Test examples:", len(test_ds))
 
 **Expected:** `Training examples: 2000` and `Test examples: 500`.
 
-> **Say:** "We're only using 2,000 of the 16,000 examples so training finishes in minutes on a CPU. The **test** set is data the model never sees during training. That's how we check whether it actually learned or just memorized."
 
 ### Step 2.5: Tokenization (how models "read")
 
@@ -176,10 +147,6 @@ print("Tokens:   ", tokenizer.convert_ids_to_tokens(encoded["input_ids"]))
 ```
 
 **Expected:** a list of numbers, then the matching tokens: `['[CLS]', 'i', 'feel', 'so', 'happy', 'today', '[SEP]']`.
-
-> **Say:** "Models can't read words, only numbers. The tokenizer splits text into pieces and turns each piece into an ID. `[CLS]` and `[SEP]` are special start and end markers. Every model on Hugging Face comes with its own matching tokenizer."
->
-> Fun extra: have someone try a weird word like `"unbelievably"` to show it splitting into sub-words.
 
 ### Step 2.6: Tokenize the whole dataset
 
@@ -213,7 +180,6 @@ print(f"Model loaded with {model.num_parameters():,} parameters")
 
 **Expected:** `Model loaded with ~67,000,000 parameters`. You'll **also** see a warning like *"Some weights of DistilBertForSequenceClassification were not initialized… You should probably TRAIN this model…"* **That warning is expected.**
 
-> **Say:** "DistilBERT already understands English. Someone else trained it on a huge amount of text. But we just bolted a brand-new 'emotion classifier' layer on top, and that layer is random. That's what the warning is telling us. A model is really just ~67 million numbers called **weights**. Training means adjusting those numbers."
 
 ### Step 2.8: Test the model BEFORE training
 
@@ -242,7 +208,6 @@ for s in test_sentences:
 
 **Expected:** basically random guesses, often the same label for everything, at low confidence (about 16–25%).
 
-> **Say:** "Remember these answers. They're garbage, and that's the point. Let's train it."
 
 ### Step 2.9: Train! (about 8–12 minutes)
 
@@ -280,13 +245,6 @@ trainer.train()
 
 **Expected:** a progress bar counting up to **250 steps**. A table appears with **Training Loss** going *down* and, after each epoch, **Accuracy**.
 
-> **Say (while it trains, this is a good time for Q&A):**
-> - "An **epoch** is one full pass through the 2,000 training examples. We're doing 2."
-> - "**Batch size 16** means the model looks at 16 examples, checks how wrong it was, and nudges its weights. 2,000 ÷ 16 = 125 nudges per epoch, × 2 epochs = 250 steps."
-> - "**Loss** measures how wrong the model is. We want it going down."
-> - "**Learning rate** is how big each nudge is. Too big and it overshoots, too small and it takes forever."
-> - "Notice this is slow, because we're on a tiny 2-CPU machine. In Part 3 we'll see how AWS lets you rent bigger machines for exactly as long as you need them."
-
 **If it's running too slowly** (more than 15 min estimated): stop the cell (■ button), change `range(2000)` to `range(1000)` in Step 2.4, and rerun Steps 2.4 → 2.9.
 
 ### Step 2.10: Test the model AFTER training
@@ -302,8 +260,6 @@ for s in test_sentences:
 
 **Expected:** accuracy well above random (random would be about 17%). It usually lands somewhere around 60–85% with this small slice, and the four sentences now get sensible labels.
 
-> **Say:** "Same model, same sentences. It went from random to actually useful in about 10 minutes, with only 2,000 examples. That's the power of **fine-tuning** a pretrained model instead of training from scratch."
-
 ### Step 2.11: Try your own sentences
 
 ```python
@@ -311,19 +267,9 @@ my_sentence = "type anything you want here"
 print(predict(my_sentence))
 ```
 
-> **Say:** "Change the text and rerun it. Try to trick it. Sarcasm usually breaks it. Why do you think that is?" (Answer: the training data barely has sarcasm, and the model only learned the patterns it saw.)
-
 ---
 
 ## PART 3: Do it the cloud way with a SageMaker training job (20–25 min)
-
-> **Say (AWS club can lead this part):** "What we just did is great for experimenting, but real teams don't train in a notebook. They package the training code into a script, and SageMaker:
-> 1. starts a fresh machine (any size, including GPUs),
-> 2. runs the script inside a **Docker container**,
-> 3. saves the trained model to **S3** (AWS's file storage),
-> 4. **shuts the machine down automatically**, so you only pay for the minutes it ran.
->
-> The notebook stays tiny and cheap. The heavy lifting happens elsewhere."
 
 Keep working in the **same notebook**, adding cells below.
 
@@ -466,10 +412,6 @@ print("Training container:", image)
 - a bucket name like `sagemaker-us-east-1-123456789012`
 - a container image URI ending in something like `pytorch-training:2.1-cpu-py310`
 
-> **Say:**
-> - "The **role** is an IAM permission slip. It's what allows SageMaker to read and write our S3 bucket on our behalf."
-> - "The **S3 bucket** is where the trained model will land."
-> - "That **training container** is a Docker image that AWS maintains with PyTorch pre-installed. Our script runs inside it. This is exactly what Docker is for: same environment, every time, on any machine."
 
 ### Step 3.5: Launch the training job
 
@@ -499,7 +441,7 @@ estimator.fit(wait=True)
 5. `FINAL TEST ACCURACY: …%`
 6. `Completed - Training job completed`, plus **Billable seconds: ~600–900**
 
-> **Note on why this uses `PyTorch` instead of `HuggingFace`:** SageMaker also has a `HuggingFace` estimator, but its training containers only support GPU instances. Using the PyTorch container plus a `requirements.txt` that installs `transformers` lets us stay on a free-tier CPU machine. On a GPU account, the `HuggingFace` estimator is the usual choice.
+
 
 ### Step 3.6: Watch it in the AWS Console (while it runs)
 
@@ -513,7 +455,6 @@ While the job is in the "Preparing" phase, switch to the **AWS Console browser t
    - **Monitor** section → **View logs**, which opens CloudWatch (the same logs as in the notebook)
    - **Output** section → **S3 model artifact**, where the trained model ends up
 
-> **Say:** "That machine didn't exist 5 minutes ago, and it'll be gone in 10. You can change `instance_type` to a GPU like `ml.g5.xlarge` and the **exact same script** runs faster. That's the point of the cloud."
 
 ### Step 3.7: Find your trained model in S3
 
@@ -545,7 +486,7 @@ for s in test_sentences:
 
 ## PART 4: Clean up (5 min, DO NOT SKIP)
 
-> **Say:** "The training job already shut itself down. But your **notebook machine is still running** until you stop it. Let's turn it off so nobody gets a surprise bill."
+> "The training job already shut itself down. But your **notebook machine is still running** until you stop it. Let's turn it off so nobody gets a surprise bill."
 
 1. In JupyterLab: **File → Shut Down** → confirm. (You can close that tab.)
 2. In the **SageMaker Studio** tab: left panel → **JupyterLab** → find `emotion-workshop` → click **Stop**. Wait until the status says **Stopped**.
