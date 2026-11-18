@@ -4,6 +4,8 @@
 
 ## How a model learns
 
+/Users/ahmadwali04/Desktop/personal/School Work/clubs/ML&AI/AWS Workshop/AWS-Workshop/recordings/page@5a9388612390cf59ba087ed9dcbdc1f3.webm
+
 <video controls preload="metadata" width="720" src="recordings/page@5a9388612390cf59ba087ed9dcbdc1f3.webm"></video>
 
 [Watch the ML pipeline recording (.webm)](recordings/page@5a9388612390cf59ba087ed9dcbdc1f3.webm)
