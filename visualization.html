@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How a Model Learns: ML Pipeline Visualizer</title>
+<style>
+  :root{
+    --bg:#0b0f18; --stage:#121a2a; --panel:#151d2e; --card:#1c2639; --line:#2b3754;
+    --text:#e9edf5; --muted:#97a3bb; --accent:#5b9dff; --accent2:#ffb547; --good:#3ecf8e; --bad:#ff6b6b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+  code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  code{background:#0c1220;border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:.88em;color:#cfe0ff}
+
+  #app{position:absolute;left:50%;top:50%;width:1280px;height:720px;transform-origin:center center}
+
+  /* header */
+  #hdr{position:absolute;left:20px;top:12px;width:1240px;height:44px;display:flex;align-items:center;justify-content:space-between}
+  #stepno{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  #title{font-size:24px;font-weight:700;margin-top:2px}
+  #dots{display:flex;gap:8px}
+  #dots button{width:12px;height:12px;border-radius:50%;border:0;background:#2b3754;cursor:pointer;padding:0;transition:all .3s}
+  #dots button.on{background:var(--accent);width:28px;border-radius:6px}
+  #dots button.done{background:#41557e}
+
+  /* stage */
+  #stage{position:absolute;left:20px;top:64px;width:1240px;height:420px;background:var(--stage);
+    border:1px solid var(--line);border-radius:16px;overflow:hidden}
+  #svg{position:absolute;inset:0;width:1240px;height:420px;pointer-events:none}
+  #layer{position:absolute;inset:0}
+
+  /* narration strip */
+  #narr{position:absolute;left:20px;top:492px;width:1240px;height:42px;display:flex;align-items:center;justify-content:center}
+  #narr span{background:#1a2440;border:1.5px solid var(--accent);color:#fff;border-radius:999px;padding:8px 20px;
+    font-size:17px;font-weight:600;transition:opacity .3s, transform .3s;max-width:1200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #narr span.hide{opacity:0;transform:translateY(6px)}
+
+  /* bottom panel */
+  #panel{position:absolute;left:20px;top:542px;width:1240px;height:134px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .pbox{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 16px;overflow:hidden}
+  .pbox h4{margin:0 0 6px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  #what{font-size:16px;line-height:1.45}
+  #eq{font-size:15.5px;line-height:1.6;font-family:"Cambria Math","STIX Two Math","Latin Modern Math",Georgia,serif}
+  #eq b{color:#ffd9a0;font-weight:600}
+  #eqbox{border-color:#4a3a1d;background:linear-gradient(180deg,#1b1a1a,#16151c)}
+  #eqbox h4{color:var(--accent2)}
+
+  /* controls */
+  #ctrl{position:absolute;left:20px;top:684px;width:1240px;height:30px;display:flex;align-items:center;justify-content:space-between;color:var(--muted);font-size:13px}
+  #ctrl .btns{display:flex;gap:8px}
+  #ctrl button{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:5px 14px;font-size:14px;cursor:pointer}
+  #ctrl button:hover{border-color:var(--accent)}
+  #ctrl button.active{background:var(--accent);color:#08101f;border-color:var(--accent)}
+  #pause{min-width:112px;font-weight:700}
+  #pause.paused{background:var(--accent2);color:#1a1205;border-color:var(--accent2)}
+  #pbadge{position:absolute;right:14px;top:12px;z-index:50;background:rgba(255,181,71,.15);border:1.5px solid var(--accent2);color:#ffd9a0;
+    border-radius:999px;padding:6px 14px;font-size:15px;font-weight:700;opacity:0;transition:opacity .25s;pointer-events:none}
+  #pbadge.on{opacity:1}
+
+  /* animated nodes */
+  .n{position:absolute;opacity:0;transform:translateY(10px) scale(.97);
+     transition:opacity .45s ease, transform .45s ease, left .9s cubic-bezier(.5,0,.2,1), top .9s cubic-bezier(.5,0,.2,1),
+                background .4s, border-color .4s, box-shadow .4s, filter .6s}
+  .n.on{opacity:1;transform:none}
+  .ctr{translate:-50% -50%}
+  .box{background:var(--card);border:1.5px solid var(--line);border-radius:14px;padding:14px 16px}
+  .box.big{background:#161f31}
+  .bt{font-size:21px;font-weight:700}
+  .sub{font-size:13.5px;color:var(--muted);margin-top:3px;line-height:1.35}
+  .card{background:#22304a;border:1.5px solid #3a4d74;border-radius:12px;padding:12px 14px;font-size:15px}
+  .card .ct{font-weight:700;font-size:16px;margin-bottom:4px}
+  .hl{border-color:var(--accent2)!important;box-shadow:0 0 0 3px rgba(255,181,71,.25),0 0 28px rgba(255,181,71,.25)}
+  .tag{background:#0c1220;border:1px solid var(--line);border-radius:8px;padding:4px 9px;font-size:13px;white-space:nowrap}
+  .hdrtxt{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:center;font-weight:700}
+
+  .row{display:flex;justify-content:space-between;align-items:center;background:#192236;border:1px solid var(--line);
+       border-radius:10px;padding:8px 12px;font-size:15px;width:560px}
+  .row.head{background:transparent;border:0;color:var(--muted);font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700}
+  .lab{border-radius:999px;padding:2px 10px;font-size:13px;font-weight:700;color:#0b0f18}
+  .dot{width:14px;height:14px;border-radius:50%}
+
+  .tok{background:#22304a;border:1.5px solid #3a4d74;border-radius:10px;padding:8px 6px;text-align:center;font-size:17px;font-weight:600}
+  .tok.sp{background:#3a2d16;border-color:#7a5a20;color:#ffd08a}
+  .tok span{display:block;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--muted);font-weight:500}
+  .idc{background:#0c1220;border:1.5px solid #2f5aa8;color:#9cc2ff;border-radius:10px;padding:8px 6px;text-align:center;
+       font-family:ui-monospace,Menlo,Consolas,monospace;font-size:18px;font-weight:700}
+
+  .vec{display:flex;gap:2px}
+  .vec i{display:block;width:12px;height:28px;border-radius:3px}
+  .vec.v{flex-direction:column;gap:3px}
+  .vec.v i{width:30px;height:14px}
+
+  .layer{background:linear-gradient(180deg,rgba(91,157,255,.18),rgba(91,157,255,.07));border:1.5px solid #34507f;border-radius:10px;
+         display:flex;align-items:flex-end;justify-content:center;padding-bottom:8px;font-size:13px;font-weight:700;color:#9cc2ff}
+  .layer.hl{background:linear-gradient(180deg,rgba(255,181,71,.4),rgba(255,181,71,.12))}
+
+  .logit{background:#0c1220;border:1px solid var(--line);border-left-width:5px;border-radius:8px;padding:5px 8px;
+         font-family:ui-monospace,Menlo,Consolas,monospace;font-size:15px;text-align:right;width:70px}
+
+  .barrow{display:flex;align-items:center;gap:8px;font-size:15px;color:var(--muted)}
+  .barrow .bl{display:inline-block;text-align:right}
+  .barrow .track{display:inline-block;height:20px;background:#0c1220;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .barrow .fill{display:block;height:100%;width:0;border-radius:10px;transition:width .9s cubic-bezier(.3,0,.2,1)}
+  .barrow .pct{display:inline-block;width:44px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px}
+  .barrow.top{color:#fff;font-weight:700}
+
+  .station{background:var(--card);border:1.5px solid var(--line);border-radius:12px;padding:7px 12px;text-align:center;font-size:15px;min-width:150px}
+  .station .sub{font-size:12.5px;margin-top:1px}
+  .bignum{font-size:34px;font-weight:800;text-align:center;line-height:1}
+  .bignum small{font-size:16px;color:var(--muted);font-weight:600}
+
+  .sq{width:26px;height:26px;border-radius:5px;background:#26314a;transition:background .25s, transform .25s}
+  .sq.ok{background:var(--good)}
+  .sq.bad{background:var(--bad)}
+
+  .verdict{border-radius:12px;padding:10px 16px;font-size:17px;font-weight:700}
+  .verdict.badv{background:rgba(255,107,107,.12);border:1.5px solid var(--bad)}
+  .verdict.goodv{background:rgba(62,207,142,.12);border:1.5px solid var(--good)}
+
+  .prog{height:12px;background:#0c1220;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--good));transition:width .25s linear}
+  .status{display:inline-block;border-radius:999px;padding:3px 12px;font-size:13px;font-weight:700;background:#2b3754}
+  .off{filter:grayscale(1) brightness(.55)}
+
+  .pipe{background:var(--card);border:1.5px solid var(--line);border-radius:14px;padding:12px 8px;text-align:center;width:128px;height:118px}
+  .pipe .ic{font-size:30px}
+  .pipe .pt{font-weight:700;font-size:15px;margin-top:4px}
+  .pipe .sub{font-size:12px}
+  .pipe.lit{border-color:var(--good);box-shadow:0 0 0 3px rgba(62,207,142,.2),0 0 26px rgba(62,207,142,.2)}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <marker id="ah-b" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5b9dff"/></marker>
+    <marker id="ah-o" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#ffb547"/></marker>
+    <marker id="ah-g" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3ecf8e"/></marker>
+    <marker id="ah-m" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5d6b88"/></marker>
+  </defs>
+</svg>
+
+<div id="app">
+  <div id="hdr">
+    <div><div id="stepno"></div><div id="title"></div></div>
+    <div id="dots"></div>
+  </div>
+  <div id="stage"><svg id="svg" viewBox="0 0 1240 420"></svg><div id="layer"></div><div id="pbadge">⏸ Paused · questions?</div></div>
+  <div id="narr"><span class="hide"></span></div>
+  <div id="panel">
+    <div class="pbox"><h4>What's happening</h4><div id="what"></div></div>
+    <div class="pbox" id="eqbox"><h4>Under the hood</h4><div id="eq"></div></div>
+  </div>
+  <div id="ctrl">
+    <div class="btns">
+      <button id="prev">◀ Prev</button>
+      <button id="pause">⏸ Pause</button>
+      <button id="replay">⟳ Replay</button>
+      <button id="next">Next ▶</button>
+      <button id="auto">Auto-play: off</button>
+    </div>
+    <div>Keys: <b>→</b>/<b>Space</b> next · <b>←</b> back · <b>P</b> pause/resume · <b>R</b> replay · <b>A</b> auto-play</div>
+  </div>
+</div>
+
+<script>
+/* ---------- scaling ---------- */
+const app = document.getElementById('app');
+function fit(){ const s = Math.min(innerWidth/1280, innerHeight/720); app.style.transform = `translate(-50%,-50%) scale(${s})`; }
+addEventListener('resize', fit); fit();
+
+/* ---------- core helpers ---------- */
+const layer = document.getElementById('layer');
+const svg = document.getElementById('svg');
+const NS = 'http://www.w3.org/2000/svg';
+const Cancel = Symbol('cancel');
+let run = 0, cur = 0, auto = false, paused = false;
+
+// Pause-aware sleep: time only counts down while not paused.
+function sleep(ms){
+  const id = run;
+  return new Promise((res, rej) => {
+    let left = ms, last = performance.now();
+    const tick = () => {
+      if (id !== run) return rej(Cancel);
+      const now = performance.now();
+      if (!paused) left -= now - last;
+      last = now;
+      if (left <= 0) res(); else setTimeout(tick, Math.min(40, Math.max(1, left)));
+    };
+    setTimeout(tick, Math.min(40, Math.max(0, ms)));
+  });
+}
+function alive(id){ if (id !== run) throw Cancel; }
+
+function N(html, x, y, cls = '', style = ''){
+  const d = document.createElement('div');
+  d.className = 'n ' + cls; d.innerHTML = html;
+  d.style.left = x + 'px'; d.style.top = y + 'px';
+  if (style) d.style.cssText += ';' + style;
+  layer.appendChild(d); return d;
+}
+function show(...els){ els.flat().forEach(e => { void e.offsetWidth; e.classList.add('on'); }); }
+function move(e, x, y){ e.style.left = x + 'px'; e.style.top = y + 'px'; }
+function S(tag, attrs = {}){ const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); svg.appendChild(e); return e; }
+
+function arrow(x1, y1, x2, y2, o = {}){
+  const colors = {b:'#5b9dff', o:'#ffb547', g:'#3ecf8e', m:'#5d6b88'};
+  const m = o.m || 'b', bend = o.bend || 0;
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+  const cx = mx - dy / len * bend, cy = my + dx / len * bend;
+  const p = S('path', {d:`M${x1},${y1} Q${cx},${cy} ${x2},${y2}`, fill:'none', stroke:colors[m], 'stroke-width':o.w || 2.5, 'stroke-linecap':'round'});
+  if (o.op) p.setAttribute('opacity', o.op);
+  const dur = o.dur || 700;
+  if (o.dash){ p.setAttribute('stroke-dasharray', '6 7'); if (!o.noHead) p.setAttribute('marker-end', `url(#ah-${m})`); return p; }
+  const L = p.getTotalLength();
+  p.style.strokeDasharray = L; p.style.strokeDashoffset = L; p.getBoundingClientRect();
+  p.style.transition = `stroke-dashoffset ${dur}ms ease`; p.style.strokeDashoffset = 0;
+  if (!o.noHead) setTimeout(() => p.setAttribute('marker-end', `url(#ah-${m})`), dur * .85);
+  return p;
+}
+
+const narrEl = document.querySelector('#narr span');
+let narrT;
+function narr(html){
+  clearTimeout(narrT);
+  narrEl.classList.add('hide');
+  if (!html) return;
+  narrT = setTimeout(() => { narrEl.innerHTML = html; narrEl.classList.remove('hide'); }, 180);
+}
+
+function rng(seed){ let s = seed; return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; }; }
+function cells(n, seed){
+  const r = rng(seed * 31 + 7); let h = '';
+  for (let i = 0; i < n; i++){
+    const v = r() * 2 - 1;
+    const c = v > 0 ? `rgba(91,157,255,${.25 + .75 * v})` : `rgba(255,181,71,${.25 + .75 * -v})`;
+    h += `<i style="background:${c}"></i>`;
+  }
+  return h;
+}
+function softmax(z){ const m = Math.max(...z), e = z.map(v => Math.exp(v - m)), s = e.reduce((a, b) => a + b, 0); return e.map(v => v / s); }
+
+const EMO = ['sadness','joy','love','anger','fear','surprise'];
+const COL = {sadness:'#6c8cff', joy:'#ffd166', love:'#ff7eb6', anger:'#ff6b6b', fear:'#b48cff', surprise:'#3ecf8e'};
+
+function bars(x, y, {w = 160, gap = 44, labelW = 80} = {}){
+  const rows = EMO.map((e, i) => N(
+    `<span class="bl" style="width:${labelW}px">${e}</span><span class="track" style="width:${w}px"><span class="fill" style="background:${COL[e]}"></span></span><span class="pct">0%</span>`,
+    x, y + i * gap, 'barrow'));
+  return {
+    rows,
+    set(p){
+      const top = p.indexOf(Math.max(...p));
+      rows.forEach((r, i) => {
+        r.querySelector('.fill').style.width = (p[i] * 100) + '%';
+        r.querySelector('.pct').textContent = Math.round(p[i] * 100) + '%';
+        r.classList.toggle('top', i === top);
+      });
+    }
+  };
+}
+
+/* ---------- scenes ---------- */
+const scenes = [
+
+/* 0 — Title */
+{ title:'How a model learns', what:
+  'We\'ll follow one dataset and one sentence through the whole pipeline: <b>download → prepare → predict → train → evaluate → train in the cloud</b>.',
+  eq:'No math needed to follow along. This box shows the core idea behind each step, in plain symbols.',
+  async run(){
+    const t = N('<div style="font-size:46px;font-weight:800;text-align:center">From Hugging Face to a trained model</div>' +
+      '<div class="sub" style="font-size:20px;text-align:center;margin-top:10px">Fine-tuning an emotion classifier on AWS · AI &amp; ML Club × AWS Club</div>', 620, 130, 'ctr', 'width:1100px');
+    show(t); await sleep(700);
+    const icons = [['🤗','Download'],['📚','Data'],['🔤','Tokenize'],['🧠','Predict'],['📉','Loss'],['🔁','Learn'],['📝','Evaluate'],['☁️','Cloud']];
+    for (let i = 0; i < icons.length; i++){
+      const n = N(`<div style="font-size:34px">${icons[i][0]}</div><div class="sub" style="font-size:14px">${icons[i][1]}</div>`, 200 + i * 120, 290, 'ctr', 'text-align:center');
+      show(n); if (i) arrow(200 + (i - 1) * 120 + 32, 280, 200 + i * 120 - 32, 280, {m:'m', w:2, dur:250});
+      await sleep(180);
+    }
+    narr('Press <b>→</b> or click <b>Next</b> to start');
+  }
+},
+
+/* 1 — Hugging Face */
+{ title:'Grab a model and a dataset from Hugging Face', what:
+  'Hugging Face is like <b>GitHub for AI</b>: thousands of free pretrained models and datasets. Two lines of Python download both into our SageMaker notebook.',
+  eq:'<b>Model</b> = architecture (the recipe) + <b>weights</b> (~67 million numbers it already learned).<br><b>Pretrained</b>: someone already spent the compute teaching it English.<br><b>Fine-tuning</b>: we only teach it our one small task.',
+  async run(){
+    const hub = N('<div class="bt">🤗 Hugging Face Hub</div><div class="sub">huggingface.co · the "GitHub for AI"</div>', 40, 34, 'box big', 'width:370px;height:350px');
+    show(hub); await sleep(500);
+    const m = N('<div class="ct">🧠 Model</div><code>distilbert-base-uncased</code><div class="sub">67M pretrained weights · already "knows" English</div>', 66, 112, 'card', 'width:318px');
+    show(m); await sleep(400);
+    const d = N('<div class="ct">📚 Dataset</div><code>dair-ai/emotion</code><div class="sub">20,000 short tweets, each labelled with an emotion</div>', 66, 244, 'card', 'width:318px');
+    show(d); await sleep(700);
+    const nb = N('<div class="bt">💻 Your notebook</div><div class="sub">SageMaker Studio · JupyterLab · ml.t3.medium</div>', 830, 34, 'box big', 'width:370px;height:350px');
+    show(nb); narr('This notebook runs on an <b>AWS computer</b>, not your laptop'); await sleep(1800);
+
+    narr('<code>from_pretrained("distilbert-base-uncased")</code> downloads the model');
+    arrow(400, 160, 850, 160, {dur:800});
+    const t1 = N('<code>AutoModel…from_pretrained()</code>', 620, 136, 'ctr tag'); show(t1);
+    await sleep(500); move(m, 856, 112); m.classList.add('hl'); await sleep(1800); m.classList.remove('hl');
+
+    narr('<code>load_dataset("dair-ai/emotion")</code> downloads the data');
+    arrow(400, 292, 850, 292, {dur:800});
+    const t2 = N('<code>load_dataset()</code>', 620, 268, 'ctr tag'); show(t2);
+    await sleep(500); move(d, 856, 244); d.classList.add('hl'); await sleep(1800); d.classList.remove('hl');
+    narr('✅ Model + data are now in our notebook, ready to go');
+  }
+},
+
+/* 2 — Dataset */
+{ title:'The dataset: examples with the right answers', what:
+  '<b>Supervised learning</b>: every example comes with the correct answer. We train on a <b>small slice</b> so a CPU finishes in minutes, and keep a separate <b>test slice</b> the model never sees during training.',
+  eq:'Dataset D = { (x<sub>1</sub>, y<sub>1</sub>), (x<sub>2</sub>, y<sub>2</sub>), … }   x = text, y = label<br>y ∈ { 0 sadness, 1 joy, 2 love, 3 anger, 4 fear, 5 surprise }<br>Models work with label <b>numbers</b>, not words.',
+  async run(){
+    const rows = [['i feel so grateful for my friends','joy'],['i feel lonely without you around','sadness'],['i am so irritated by the noise next door','anger'],
+                  ['i feel nervous about tomorrow\'s exam','fear'],['i feel loved every time you call','love'],['i was amazed at how fast it learned','surprise']];
+    const h = N('<span>x · input text</span><span>y · label</span>', 30, 18, 'row head'); show(h);
+    for (let i = 0; i < rows.length; i++){
+      const [t, l] = rows[i];
+      const r = N(`<span>“${t}”</span><span class="lab" style="background:${COL[l]}">${l} · ${EMO.indexOf(l)}</span>`, 30, 52 + i * 52, 'row');
+      show(r); await sleep(260);
+    }
+    narr('Each row = <b>input text (x)</b> + <b>correct answer (y)</b>'); await sleep(2200);
+
+    const cap = N('Full training set · 16,000 examples (each dot ≈ 167)', 680, 16, 'hdrtxt', 'width:500px;text-align:left'); show(cap);
+    const r = rng(5), dots = [];
+    for (let i = 0; i < 96; i++){
+      const e = EMO[Math.floor(r() * 6)];
+      const dd = N('', 682 + (i % 16) * 31, 46 + Math.floor(i / 16) * 28, 'dot', `background:${COL[e]};z-index:2`);
+      dots.push(dd);
+    }
+    show(dots); await sleep(900);
+    narr('<code>.shuffle(seed=42)</code>: mix the order randomly');
+    for (let k = 0; k < 3; k++){
+      dots.forEach(dd => { const i = Math.floor(r() * 96); move(dd, 682 + (i % 16) * 31, 46 + Math.floor(i / 16) * 28); });
+      await sleep(650);
+    }
+    const tb = N('<b>🏋️ Train slice · 2,000</b><div class="sub">the model learns from these</div>', 680, 236, 'box', 'width:300px;height:170px');
+    const sb = N('<b>📝 Test slice · 500</b><div class="sub">never seen in training: the final exam</div>', 996, 236, 'box', 'width:220px;height:170px');
+    show(tb, sb);
+    narr('<code>.select(range(2000))</code>: keep a small slice so training is fast');
+    for (let i = 0; i < 24; i++){ move(dots[i], 700 + (i % 8) * 34, 322 + Math.floor(i / 8) * 30); await sleep(40); }
+    await sleep(500);
+    for (let i = 24; i < 30; i++){ const k = i - 24; move(dots[i], 1030 + (k % 3) * 34, 330 + Math.floor(k / 3) * 30); await sleep(60); }
+    await sleep(700);
+    for (let i = 30; i < 96; i++) dots[i].style.opacity = .12;
+    narr('✅ Train on one pile, test on a pile the model has <b>never</b> seen');
+  }
+},
+
+/* 3 — Tokenization */
+{ title:'Tokenization: turning words into numbers', what:
+  'Models can only do math, so the <b>tokenizer</b> turns text into numbers. Every model on Hugging Face ships with its own matching tokenizer.',
+  eq:'text → tokens → IDs<br>Vocabulary: <b>30,522</b> word pieces. Rare words get split into pieces (e.g. <code>##ing</code>).<br><b>attention_mask</b>: 1 = real token, 0 = padding (ignore it).',
+  async run(){
+    const sent = N('“i feel so happy today”', 620, 40, 'ctr', 'font-size:30px;font-weight:700'); show(sent);
+    narr('Models can\'t read words, only <b>numbers</b>'); await sleep(1600);
+    const toks = ['[CLS]','i','feel','so','happy','today','[SEP]'], ids = [101,1045,2514,2061,3407,2651,102];
+    const X = i => 130 + i * 140;
+    const chips = toks.map((t, i) => N(t, X(i) + (i === 0 || i === 6 ? 0 : 0), 108, 'tok' + (t[0] === '[' ? ' sp' : ''), 'width:120px'));
+    narr('① Split the sentence into <b>tokens</b> (word pieces)');
+    for (let i = 1; i <= 5; i++){ show(chips[i]); await sleep(220); }
+    await sleep(1300);
+    narr('② Add special markers: <b>[CLS]</b> = start / summary slot, <b>[SEP]</b> = end');
+    show(chips[0], chips[6]); await sleep(1900);
+    narr('③ Look up each token\'s <b>ID</b> in the vocabulary');
+    const idc = ids.map((v, i) => N(String(v), X(i), 206, 'idc', 'width:120px'));
+    for (let i = 0; i < 7; i++){ arrow(X(i) + 60, 156, X(i) + 60, 200, {dur:300}); show(idc[i]); await sleep(200); }
+    await sleep(1600);
+    narr('④ Pad every sentence to the same length (64) so they stack into a batch');
+    const pad = N('<span class="mono">input_ids&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= [101, 1045, 2514, 2061, 3407, 2651, 102, <span style="color:#ffb547">0, 0, 0, … 0</span>]</span> <span class="sub" style="display:inline">← 64 total</span>', 130, 296, '', 'font-size:17px');
+    const msk = N('<span class="mono">attention_mask = [&nbsp;&nbsp;1,&nbsp;&nbsp;&nbsp;&nbsp;1,&nbsp;&nbsp;&nbsp;&nbsp;1,&nbsp;&nbsp;&nbsp;&nbsp;1,&nbsp;&nbsp;&nbsp;&nbsp;1,&nbsp;&nbsp;&nbsp;&nbsp;1,&nbsp;&nbsp;&nbsp;1, <span style="color:#ffb547">0, 0, 0, … 0</span>]</span> <span class="sub" style="display:inline">← 1 = real, 0 = ignore</span>', 130, 340, '', 'font-size:17px');
+    show(pad); await sleep(500); show(msk);
+    await sleep(1800); narr('✅ The sentence is now a list of numbers the model can do math on');
+  }
+},
+
+/* 4 — Forward pass */
+{ title:'Inside the model: the forward pass', what:
+  'Numbers flow <b>left to right</b> through the network and come out as a <b>probability for each emotion</b>. This is what happens every time the model makes a prediction.',
+  eq:'Scores ("logits"): <b>z = W·h + b</b>   (W and b are learnable weights)<br>Softmax: <b>p<sub>i</sub> = e<sup>z<sub>i</sub></sup> ⁄ Σ<sub>j</sub> e<sup>z<sub>j</sub></sup></b>  → every p<sub>i</sub> is between 0 and 1, and they sum to 1<br>Prediction = the emotion with the biggest p<sub>i</sub>',
+  async run(){
+    const toks = ['[CLS]','i','feel','so','happy','today','[SEP]'], ids = [101,1045,2514,2061,3407,2651,102];
+    const Y = i => 40 + i * 52;
+    const hdr = (t, x, w) => { const h = N(t, x, 12, 'hdrtxt', `width:${w}px`); show(h); return h; };
+    hdr('Token IDs', 24, 92);
+    const tk = toks.map((t, i) => N(`${t}<span>${ids[i]}</span>`, 24, Y(i), 'tok' + (t[0] === '[' ? ' sp' : ''), 'width:92px;padding:3px 4px;font-size:14px'));
+    show(tk); narr('① Token IDs go in, one per token'); await sleep(1500);
+
+    hdr('Embeddings', 140, 112);
+    const emb = toks.map((t, i) => N(cells(8, i + 1), 140, Y(i) + 4, 'vec'));
+    for (const e of emb){ show(e); await sleep(90); }
+    narr('② <b>Embedding</b>: each ID becomes a vector of <b>768 numbers</b> (we draw 8)'); await sleep(2300);
+
+    narr('③ <b>Self-attention</b>: each token looks at the others for context (“so” → “happy”)');
+    const att = [];
+    for (const j of [0,1,2,3,5,6]){
+      const y1 = Y(4) + 18, y2 = Y(j) + 18, dy = y2 - y1;
+      att.push(arrow(262, y1, 262, y2, {m:'o', bend:(dy < 0 ? 1 : -1) * Math.min(80, Math.abs(dy) * .4), w:j === 3 ? 4 : 1.6, dur:600}));
+      await sleep(150);
+    }
+    await sleep(1700);
+    att.forEach(a => a.setAttribute('opacity', .25));
+
+    hdr('6 Transformer layers', 300, 300);
+    const layers = [...Array(6)].map((_, k) => N(`L${k + 1}`, 300 + k * 52, 36, 'layer', 'height:356px;width:40px'));
+    show(layers); await sleep(500);
+    narr('④ Pass through <b>6 layers</b>; each one refines the meaning of every token');
+    for (let rep = 0; rep < 2; rep++) for (const L of layers){ L.classList.add('hl'); await sleep(170); L.classList.remove('hl'); }
+    await sleep(600);
+
+    hdr('Summary h', 628, 80);
+    arrow(602, Y(0) + 18, 650, 118, {dur:500});
+    const h = N(cells(8, 99), 653, 120, 'vec v'); show(h);
+    narr('⑤ Keep the <b>[CLS]</b> output: vector <b>h</b>, a summary of the whole sentence'); await sleep(2200);
+
+    arrow(688, 190, 724, 190, {dur:350});
+    const head = N('<b>Classifier head</b><div class="sub">the new part we train</div><div style="margin-top:8px;font-size:17px" class="mono">z = W·h + b</div>', 726, 140, 'box', 'width:150px');
+    show(head); narr('⑥ <b>Classifier head</b> turns h into one score per emotion'); await sleep(1500);
+
+    const z = [-0.4, 2.3, 0.6, -1.1, -0.5, 0.3];
+    hdr('Logits z', 894, 82);
+    arrow(878, 200, 896, 200, {dur:250, noHead:true});
+    const lg = z.map((v, j) => N((v > 0 ? '+' : '') + v.toFixed(1), 900, 42 + j * 58, 'logit', `border-left-color:${COL[EMO[j]]}`));
+    for (const l of lg){ show(l); await sleep(120); }
+    await sleep(1400);
+
+    hdr('Softmax → p', 990, 230);
+    arrow(976, 200, 994, 200, {dur:250, noHead:true});
+    const b = bars(994, 46, {w:96, gap:58, labelW:68});
+    show(b.rows); await sleep(300);
+    narr('⑦ <b>Softmax</b> squashes scores into probabilities that add up to 100%');
+    b.set(softmax(z)); await sleep(2300);
+    narr('⑧ Prediction = the highest probability → <b>joy</b> 😊');
+  }
+},
+
+/* 5 — Before training */
+{ title:'Before training: a random guess', what:
+  'The <b>classifier head</b> we bolted on starts with <b>random</b> weights. DistilBERT understands English, but it has no idea what our 6 emotions mean yet.',
+  eq:'Random head ⇒ p ≈ 1⁄6 ≈ 17% for every emotion<br>Loss for the true label (joy): <b>L = −log(0.16) ≈ 1.83</b>   (high = bad)',
+  async run(){ await predictScene(false); }
+},
+
+/* 6 — Training loop */
+{ title:'Training: the learning loop', what:
+  'Training is a loop: <b>predict → measure how wrong → figure out which weights to blame → nudge them → repeat</b>. A falling loss curve means the model is getting less wrong.',
+  eq:'Loss: <b>L = −log p<sub>true</sub></b>   ·   Gradient <b>∂L⁄∂w</b> = which way to move w to lower L<br>Update: <b>w ← w − η · ∂L⁄∂w</b>   (learning rate η = 5×10<sup>−5</sup>)<br>Steps = 2,000 ÷ 16 per batch × 2 epochs = <b>250</b>',
+  async run(){
+    const id = run;
+    const cx = 230, cy = 205, r = 145;
+    S('circle', {cx, cy, r, fill:'none', stroke:'#2b3754', 'stroke-width':3, 'stroke-dasharray':'4 8'});
+    const st = [['① Batch','16 training examples'],['② Forward pass','make predictions'],['③ Loss','how wrong were we?'],['④ Backprop','compute gradients'],['⑤ Update','nudge the weights']];
+    const ang = st.map((_, i) => -Math.PI / 2 + i * 2 * Math.PI / 5);
+    const sn = st.map((s, i) => N(`<b>${s[0]}</b><div class="sub">${s[1]}</div>`, cx + r * Math.cos(ang[i]), cy + r * Math.sin(ang[i]), 'station ctr'));
+    show(sn);
+    const ctr = N('<div class="bignum"><span id="stp">0</span><small> / 250</small></div><div class="sub" style="text-align:center">training steps</div><div class="sub" id="epc" style="text-align:center;color:#ffb547;font-weight:700">Epoch 1 of 2</div>', cx, cy, 'ctr');
+    show(ctr);
+    const dot = S('circle', {r:9, fill:'#ffb547'});
+    let a = ang[0];
+    const setDot = t => { dot.setAttribute('cx', cx + r * Math.cos(t)); dot.setAttribute('cy', cy + r * Math.sin(t)); };
+    setDot(a);
+    const dotTo = (t1, ms) => new Promise((res, rej) => {
+      const t0 = a; let el = 0, last = performance.now();
+      const f = now => {
+        if (id !== run) return rej(Cancel);
+        if (!paused) el += now - last; last = now;
+        const k = Math.min(1, el / ms), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+        a = t0 + (t1 - t0) * e; setDot(a);
+        k < 1 ? requestAnimationFrame(f) : res();
+      };
+      requestAnimationFrame(f);
+    });
+
+    // chart
+    const X0 = 560, X1 = 1200, Yb = 250, yOf = L => Yb - L * 100, xOf = t => X0 + t / 250 * (X1 - X0);
+    S('line', {x1:X0, y1:30, x2:X0, y2:Yb, stroke:'#3b4866', 'stroke-width':2});
+    S('line', {x1:X0, y1:Yb, x2:X1, y2:Yb, stroke:'#3b4866', 'stroke-width':2});
+    [0, 1, 2].forEach(v => { const t = S('text', {x:X0 - 10, y:yOf(v) + 5, fill:'#97a3bb', 'font-size':13, 'text-anchor':'end'}); t.textContent = v.toFixed(1); });
+    const yl = S('text', {x:X0 + 8, y:26, fill:'#97a3bb', 'font-size':13, 'font-weight':700}); yl.textContent = 'LOSS (lower = better)';
+    const xl = S('text', {x:X1, y:Yb + 20, fill:'#97a3bb', 'font-size':13, 'text-anchor':'end'}); xl.textContent = 'training step →';
+    const line = S('polyline', {points:'', fill:'none', stroke:'#ff6b6b', 'stroke-width':2.5, 'stroke-linejoin':'round'});
+
+    const ex = N(`<div style="font-size:15px">Example in this batch: <b>“i feel so grateful for my friends”</b> · true label = <span class="lab" style="background:${COL.joy}">joy</span></div>
+      <div class="mono" style="font-size:16px;margin-top:8px">p(joy) = <b id="pj">0.16</b>  →  L = −log(p) = <b id="lv" style="color:#ff8f8f">1.83</b></div>
+      <div class="mono" style="font-size:16px;margin-top:6px;color:#97a3bb">one weight: w<sub>127</sub> = <b id="wv" style="color:#9cc2ff">0.042130</b> <span id="gv"></span></div>`,
+      540, 286, 'box', 'width:670px');
+    show(ex); await sleep(600);
+    const $ = s => layer.querySelector(s);
+
+    const say = ['Grab a <b>batch of 16</b> examples from the training slice',
+                 '<b>Forward pass</b>: the model predicts probabilities for each example',
+                 '<b>Loss</b>: compare prediction vs. true label. Big when wrong, near 0 when right',
+                 '<b>Backpropagation</b>: calculus works out how much each weight caused the error',
+                 '<b>Update</b>: nudge every weight a tiny step in the direction that lowers the loss'];
+    for (let i = 0; i < 5; i++){
+      if (i) await dotTo(ang[i], 900);
+      sn.forEach((s, k) => s.classList.toggle('hl', k === i));
+      narr(say[i]);
+      if (i === 2){ $('#lv').parentElement.parentElement.classList.add('hl'); }
+      if (i === 3){ $('#gv').innerHTML = '   gradient ∂L/∂w = <b style="color:#ffb547">+0.84</b>'; }
+      if (i === 4){ $('#wv').textContent = '0.042088'; $('#gv').innerHTML = '   ← 0.042130 − 0.00005 × 0.84'; }
+      await sleep(2700);
+    }
+    ex.classList.remove('hl');
+    await dotTo(ang[0] + 2 * Math.PI, 900);
+
+    narr('Now <b>repeat</b>: 125 steps = 1 epoch (every example seen once), 250 steps total');
+    const rr = rng(11); let pts = []; let w = 0.042088;
+    for (let t = 1; t <= 250; t++){
+      alive(id);
+      const base = 0.33 + 1.5 * Math.exp(-t / 45);
+      const L = Math.max(0.05, base + (rr() - .5) * (0.5 * Math.exp(-t / 120) + 0.12));
+      pts.push(`${xOf(t).toFixed(1)},${yOf(L).toFixed(1)}`);
+      line.setAttribute('points', pts.join(' '));
+      a += 0.42; setDot(a);
+      sn.forEach((s, k) => s.classList.toggle('hl', k === t % 5));
+      $('#stp').textContent = t;
+      const le = 0.09 + 1.74 * Math.exp(-t / 50);
+      $('#pj').textContent = Math.exp(-le).toFixed(2);
+      $('#lv').textContent = le.toFixed(2);
+      w -= 0.00005 * (rr() - .35) * 1.5; $('#wv').textContent = w.toFixed(6);
+      $('#gv').textContent = '';
+      if (t === 125){
+        S('line', {x1:xOf(125), y1:30, x2:xOf(125), y2:Yb, stroke:'#ffb547', 'stroke-dasharray':'5 6', 'stroke-width':1.5});
+        const et = S('text', {x:xOf(125) + 6, y:44, fill:'#ffb547', 'font-size':13}); et.textContent = 'epoch 2 starts';
+        $('#epc').textContent = 'Epoch 2 of 2';
+        narr('Epoch 1 done: the model has seen all 2,000 examples once. Going again!');
+      }
+      await sleep(32);
+    }
+    sn.forEach(s => s.classList.remove('hl'));
+    narr('✅ Loss fell from ~1.8 to ~0.4 → the model is <b>much less wrong</b>');
+  }
+},
+
+/* 7 — Evaluation */
+{ title:'Evaluation: the final exam', what:
+  'Now we test on sentences the model has <b>never seen</b>. No weights change here, only forward passes. This tells us whether it learned real patterns or just memorized.',
+  eq:'<b>Accuracy = correct ÷ total</b><br>Random guessing ≈ 1⁄6 ≈ 17%. Anything well above that means it learned something.<br>(Numbers here are illustrative; your run will differ.)',
+  async run(){
+    const cap = N('500 test sentences (each square ≈ 5)', 60, 10, 'hdrtxt', 'width:330px;text-align:left'); show(cap);
+    const r = rng(42), wrong = new Set(); while (wrong.size < 22) wrong.add(Math.floor(r() * 100));
+    const sq = [...Array(100)].map((_, i) => N('', 60 + (i % 10) * 33, 36 + Math.floor(i / 10) * 37, 'sq'));
+    show(sq); await sleep(600);
+    const lock = N('🔒 Weights frozen: <b>no learning</b> during evaluation', 470, 40, 'tag', 'font-size:15px;padding:8px 12px'); show(lock);
+    const sc = N('<div class="bignum" style="font-size:56px"><span id="cor">0</span><small> / <span id="tot">0</span> correct</small></div><div class="mono" style="font-size:20px;margin-top:14px">accuracy = <b id="acc" style="color:#3ecf8e">0%</b></div>', 470, 110, '');
+    show(sc);
+    narr('Run every test sentence through the model and check the answer');
+    let c = 0;
+    for (let i = 0; i < 100; i++){
+      const ok = !wrong.has(i); if (ok) c++;
+      sq[i].classList.add(ok ? 'ok' : 'bad');
+      layer.querySelector('#cor').textContent = c * 5;
+      layer.querySelector('#tot').textContent = (i + 1) * 5;
+      layer.querySelector('#acc').textContent = Math.round(c / (i + 1) * 100) + '%';
+      await sleep(i < 20 ? 110 : 40);
+    }
+    await sleep(500);
+    const cmp = N('<div class="sub" style="font-size:15px">Random guessing would get ~17%</div><div style="margin-top:8px;font-size:15px">A typical mix-up: <span class="lab" style="background:'+COL.love+'">love</span> ↔ <span class="lab" style="background:'+COL.joy+'">joy</span>. They sound alike!</div>', 470, 260, 'box', 'width:520px');
+    show(cmp);
+    narr('✅ ~78% on data it has never seen. It learned real patterns!');
+  }
+},
+
+/* 8 — After training */
+{ title:'After training: confident and (mostly) right', what:
+  'Same model, same kind of sentences, but now the weights are <b>trained</b>. The probabilities are confident and point at the right emotion.',
+  eq:'“dream internship” → joy:  <b>L = −log(0.91) ≈ 0.09</b>  (it was 1.83 before training)<br>Lower loss = more confident in the right answer.<br>Numbers here are illustrative.',
+  async run(){ await predictScene(true); }
+},
+
+/* 9 — Cloud */
+{ title:'The cloud way: a SageMaker training job', what:
+  'Real teams don\'t train in a notebook. SageMaker <b>rents a machine</b>, runs your script inside a <b>Docker container</b>, saves the model to <b>S3</b>, then <b>shuts the machine down</b>. You pay only for the seconds it ran.',
+  eq:'Cost ≈ (price per hour ÷ 3600) × billable seconds<br>Want a GPU? Change <code>instance_type</code> (e.g. <code>ml.g5.xlarge</code>). Same script, faster machine.<br><b>Docker</b> = same environment anywhere · <b>IAM role</b> = permissions · <b>S3</b> = storage',
+  async run(){
+    const nb = N('<b>💻 Notebook</b><div class="sub">ml.t3.medium<br>small &amp; cheap, only sends instructions</div>', 24, 150, 'box', 'width:180px');
+    show(nb); narr('① From the notebook you call <code>estimator.fit()</code>'); await sleep(1600);
+    const pk = N('<b>📦 code/</b><div class="sub mono">train.py<br>requirements.txt</div>', 236, 150, 'box', 'width:160px');
+    arrow(206, 196, 234, 196, {dur:300}); show(pk);
+    narr('② Your training code gets packaged and uploaded'); await sleep(1700);
+    const sm = N('<b>☁️ SageMaker AI</b><div class="sub">creates a <b>training job</b></div><div class="tag" style="display:inline-block;margin-top:8px">🔑 IAM role: the permission slip to act for you</div>', 440, 14, 'box', 'width:330px');
+    arrow(396, 170, 438, 60, {dur:500}); show(sm);
+    narr('③ SageMaker uses your <b>IAM role</b> to act on your behalf'); await sleep(2100);
+
+    const mc = N('<div style="display:flex;justify-content:space-between;align-items:center"><b>🖥️ ml.m5.xlarge · 4 vCPUs</b><span class="mono sub" style="margin:0">billable: <b id="bill" style="color:#ffb547">0</b> s</span></div>', 440, 140, 'box', 'width:440px;height:262px');
+    arrow(605, 118, 605, 138, {dur:300}); show(mc);
+    const status = N('<span class="status" id="stat">Starting</span>', 462, 182, ''); show(status);
+    narr('④ <b>Starting</b>: AWS rents a fresh machine just for this job');
+    const $ = s => layer.querySelector(s);
+    let bill = 0;
+    const tick = async (n, ms) => { for (let i = 0; i < n; i++){ bill += 7; $('#bill').textContent = bill; await sleep(ms); } };
+    await tick(12, 120);
+
+    const ct = N('<b>🐳 Docker container</b><div class="sub">PyTorch 2.1 image + <code>pip install transformers…</code></div><div style="margin-top:12px" class="mono">python train.py --epochs 2</div><div class="prog" style="margin-top:10px"><i id="pg"></i></div><div class="sub" id="pgt">waiting…</div>', 462, 218, 'box', 'width:396px;border-color:#2f5aa8');
+    show(ct); $('#stat').textContent = 'Downloading';
+    narr('⑤ <b>Downloading</b> the Docker image: the exact same environment, on any machine');
+    await tick(10, 120);
+
+    const hub = N('<b>🤗 Hub</b><div class="sub">model + dataset</div>', 930, 30, 'box', 'width:150px');
+    show(hub); arrow(930, 70, 860, 230, {m:'o', dur:600, bend:-30});
+    $('#stat').textContent = 'Training'; $('#stat').style.background = '#2f5aa8';
+    narr('⑥ <b>Training</b>: the same <code>train.py</code> logic as our notebook');
+    for (let p = 0; p <= 100; p += 4){ $('#pg').style.width = p + '%'; $('#pgt').textContent = `step ${Math.round(p * 2.5)} / 250`; bill += 22; $('#bill').textContent = bill; await sleep(110); }
+
+    const s3 = N('<b>🪣 S3 bucket</b><div class="sub mono">…/output/model.tar.gz</div>', 930, 250, 'box', 'width:280px');
+    show(s3); $('#stat').textContent = 'Uploading'; $('#stat').style.background = '#7a5a20';
+    narr('⑦ <b>Uploading</b> the trained model to S3 (AWS file storage)');
+    arrow(860, 300, 928, 290, {m:'g', dur:500});
+    const file = N('📄 model.tar.gz', 760, 330, 'tag'); show(file);
+    await sleep(300); move(file, 1000, 330); await tick(6, 120);
+
+    $('#stat').textContent = 'Completed'; $('#stat').style.background = '#1f6b4a';
+    await sleep(800);
+    mc.classList.add('off'); ct.classList.add('off');
+    const zz = N('💤 Machine shut down: billing stops', 660, 300, 'ctr verdict goodv', 'background:#10241b;z-index:3'); show(zz);
+    narr(`⑧ <b>Completed</b>: ${bill} billable seconds, then the machine is gone 💸`);
+  }
+},
+
+/* 10 — Recap */
+{ title:'The whole pipeline', what:
+  'Every ML project, from this workshop to giant LLMs, follows this same shape. The big ones just have more data, bigger models, and many more GPUs.',
+  eq:'<b>Predict</b>: z = W·h + b → p = softmax(z)<br><b>Learn</b>: L = −log p<sub>true</sub> → w ← w − η · ∂L⁄∂w   (repeat for every batch)<br><b>Check</b>: accuracy on unseen test data',
+  async run(){
+    const P = [['🤗','Download','model + data'],['📚','Split','train / test'],['🔤','Tokenize','text → IDs'],['🧠','Forward','predict p'],
+               ['📉','Loss','how wrong?'],['🔁','Backprop','update w'],['📝','Evaluate','test accuracy'],['🪣','Save','model → S3']];
+    const X = i => 31 + i * 150, Yp = 170;
+    const nodes = P.map((p, i) => N(`<div class="ic">${p[0]}</div><div class="pt">${p[1]}</div><div class="sub">${p[2]}</div>`, X(i), Yp, 'pipe'));
+    for (let i = 0; i < nodes.length; i++){
+      show(nodes[i]); if (i) arrow(X(i - 1) + 130, Yp + 59, X(i) - 4, Yp + 59, {dur:250});
+      await sleep(220);
+    }
+    await sleep(400);
+    const loopA = arrow(X(5) + 64, Yp - 4, X(3) + 64, Yp - 4, {m:'o', bend:90, w:3, dur:700});
+    const lt = N('repeat × 250 steps (2 epochs)', X(4) + 64, Yp - 82, 'ctr tag', 'color:#ffb547;border-color:#7a5a20'); show(lt);
+    const cloud = N('☁️ steps 3 to 6 can run inside a SageMaker training job', (X(2) + X(5) + 128) / 2, Yp + 160, 'ctr tag', 'font-size:14px'); show(cloud);
+    const br = N('', X(2), Yp + 128, '', `width:${X(5) - X(2) + 128}px;height:10px;border:2px solid #2f5aa8;border-top:0;border-radius:0 0 8px 8px`); show(br);
+    const labels = ['Grab a pretrained model and a labelled dataset','Shuffle, then keep a train slice and a test slice','Turn words into token IDs',
+                    'Run IDs through the network to get probabilities','Measure how wrong the prediction was','Blame the weights and nudge them',
+                    'Check accuracy on data it has never seen','Store the trained model so you can use it later'];
+    for (let k = 0; k < 2; k++){
+      for (let i = 0; i < nodes.length; i++){
+        nodes.forEach((n, j) => n.classList.toggle('lit', j === i));
+        narr(labels[i]);
+        await sleep(k === 0 ? 1500 : 300);
+      }
+    }
+    nodes.forEach(n => n.classList.add('lit'));
+    narr('🎉 That\'s the whole pipeline. Now let\'s go build it!');
+  }
+},
+];
+
+/* shared scene: prediction before / after training */
+async function predictScene(trained){
+  const sents = trained ? [
+    ['i just got accepted into my dream internship', [.02,.91,.03,.01,.01,.02]],
+    ['i miss my family so much it hurts',             [.88,.03,.04,.02,.02,.01]],
+    ['why would you lie to me like that',             [.08,.02,.02,.81,.05,.02]],
+    ['i heard a noise downstairs and i am home alone',[.04,.01,.01,.04,.84,.06]],
+  ] : [['i just got accepted into my dream internship', [.17,.16,.19,.15,.17,.16]]];
+
+  const sb = N('', 30, 150, 'box', 'width:300px;font-size:19px;font-weight:600;min-height:100px;display:flex;align-items:center');
+  const sh = N('Input sentence', 30, 118, 'hdrtxt', 'width:300px;text-align:left');
+  show(sh);
+  const model = N(trained
+      ? '<div class="bt" style="font-size:19px">🧠 DistilBERT</div><div class="sub">pretrained English understanding</div><div class="verdict goodv" style="margin-top:12px;font-size:15px;padding:8px 12px">✅ trained classifier head</div>'
+      : '<div class="bt" style="font-size:19px">🧠 DistilBERT</div><div class="sub">pretrained English understanding</div><div class="verdict badv" style="margin-top:12px;font-size:15px;padding:8px 12px">🎲 random classifier head</div>',
+      410, 132, 'box', 'width:260px');
+  const b = bars(744, 40, {w:250, gap:46, labelW:84});
+  const verdict = N('', 744, 334, 'verdict ' + (trained ? 'goodv' : 'badv'), 'width:450px');
+
+  for (let k = 0; k < sents.length; k++){
+    const [s, p] = sents[k];
+    sb.classList.remove('on'); await sleep(k ? 300 : 0);
+    sb.innerHTML = `“${s}”`; show(sb);
+    if (k === 0){
+      await sleep(600); arrow(334, 200, 406, 200, {dur:400}); show(model); await sleep(700);
+      arrow(674, 200, 738, 200, {dur:400}); show(b.rows);
+      narr(trained ? 'Run the same sentences through the <b>trained</b> model' : 'Ask the untrained model: which emotion is this?');
+      await sleep(900);
+    } else {
+      b.set([1/6,1/6,1/6,1/6,1/6,1/6]); verdict.classList.remove('on'); await sleep(500);
+    }
+    b.set(p); await sleep(1000);
+    const top = p.indexOf(Math.max(...p));
+    verdict.innerHTML = trained
+      ? `✅ ${EMO[top]} (${Math.round(p[top] * 100)}% sure)`
+      : `❌ “${EMO[top]}” (${Math.round(p[top] * 100)}%): basically a dice roll`;
+    show(verdict);
+    if (!trained){
+      await sleep(1500);
+      narr('All about 17% (1 in 6): the new head hasn\'t learned anything yet');
+      await sleep(2500);
+      narr('Loss for the true answer (joy) = −log(0.16) ≈ <b>1.83</b>, which is high. Let\'s train it!');
+    } else {
+      await sleep(2600);
+    }
+  }
+  if (trained) narr('✅ From dice rolls to confident answers in ~10 minutes of training');
+}
+
+/* ---------- player ---------- */
+const dotsEl = document.getElementById('dots');
+scenes.forEach((_, i) => { const b = document.createElement('button'); b.title = scenes[i].title; b.onclick = () => go(i); dotsEl.appendChild(b); });
+
+function reset(){
+  layer.innerHTML = '';
+  [...svg.childNodes].forEach(n => n.remove());
+  narr('');
+}
+async function go(i){
+  cur = Math.max(0, Math.min(scenes.length - 1, i));
+  const id = ++run;
+  setPaused(false);
+  reset();
+  const sc = scenes[cur];
+  document.getElementById('stepno').textContent = cur === 0 ? 'Intro' : `Step ${cur} of ${scenes.length - 1}`;
+  document.getElementById('title').textContent = sc.title;
+  document.getElementById('what').innerHTML = sc.what;
+  document.getElementById('eq').innerHTML = sc.eq;
+  [...dotsEl.children].forEach((d, k) => { d.classList.toggle('on', k === cur); d.classList.toggle('done', k < cur); });
+  try {
+    await sc.run();
+    if (auto && id === run && cur < scenes.length - 1){ await sleep(3000); go(cur + 1); }
+  } catch (e){ if (e !== Cancel) console.error(e); }
+}
+document.getElementById('next').onclick = () => go(cur + 1);
+document.getElementById('prev').onclick = () => go(cur - 1);
+document.getElementById('replay').onclick = () => go(cur);
+const autoBtn = document.getElementById('auto');
+function toggleAuto(){ auto = !auto; autoBtn.textContent = 'Auto-play: ' + (auto ? 'on' : 'off'); autoBtn.classList.toggle('active', auto); if (auto) go(cur); }
+autoBtn.onclick = toggleAuto;
+const pauseBtn = document.getElementById('pause');
+const pbadge = document.getElementById('pbadge');
+function setPaused(v){
+  paused = v;
+  // also freeze in-flight CSS transitions (moving boxes, growing bars, drawing arrows)
+  document.getAnimations().forEach(a => { try { v ? a.pause() : a.play(); } catch (_) {} });
+  pauseBtn.textContent = v ? '▶ Resume' : '⏸ Pause';
+  pauseBtn.classList.toggle('paused', v);
+  pbadge.classList.toggle('on', v);
+}
+pauseBtn.onclick = () => setPaused(!paused);
+addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown'){ e.preventDefault(); go(cur + 1); }
+  else if (e.key === 'ArrowLeft' || e.key === 'PageUp'){ e.preventDefault(); go(cur - 1); }
+  else if (e.key.toLowerCase() === 'r') go(cur);
+  else if (e.key.toLowerCase() === 'a') toggleAuto();
+  else if (e.key.toLowerCase() === 'p' || e.key === 'Pause'){ e.preventDefault(); setPaused(!paused); }
+});
+go(0);
+</script>
+</body>
+</html>
