@@ -4,11 +4,16 @@
 
 ## How a model learns
 
-/Users/ahmadwali04/Desktop/personal/School Work/clubs/ML&AI/AWS Workshop/AWS-Workshop/recordings/page@5a9388612390cf59ba087ed9dcbdc1f3.webm
+Preview the interactive visualization in your browser.
 
-<video controls preload="metadata" width="720" src="recordings/page@5a9388612390cf59ba087ed9dcbdc1f3.webm"></video>
+1. Clone the repository.
 
-[Watch the ML pipeline recording (.webm)](recordings/page@5a9388612390cf59ba087ed9dcbdc1f3.webm)
+   ```bash
+   git clone https://github.com/wlumachinelearning/AWS-Workshop.git
+   ```
+
+2. Open the downloaded `AWS-Workshop` folder and double-click `visualization.html` to open it in your browser.
+3. Click **Next** to step through the animation or **Auto-play** to watch it run.
 
 ## Workshop overview
 
